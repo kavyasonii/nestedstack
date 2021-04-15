@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Root Stack Template
+
+Parameters:
+  MyinstanceID:
+    Type: String
+    Default: hellonestedstack
+    Description: Instance Name
+
+  MyKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+  VpcBlock:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR Tange
+
+  Subnet01Block:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CidrBlock for Subnet 01 within the VPC.
+
+Resources:
+
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-2.amazonaws.com/nestedbucket0189/nestedstacks/13-01-NestedStack-VPC.yml
+      Parameters:
+        VpcBlock: !Ref VpcBlock
+        Subnet01Block: !Ref Subnet01Block
+      TimeoutInMinutes: 5
+
+  SecurityGroupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://nestedstack2021.s3.us-east-2.amazonaws.com/nestedstack/3nestedsg.yml
+      Parameters:
+        VPCId: !GetAtt VPCStack.Outputs.VpcId
+      TimeoutInMinutes: 5
+
+  MyVMInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-05d72852800cbf29e
+      InstanceType: t2.micro
+      KeyName: !Ref MyKeyName
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !GetAtt VPCStack.Outputs.Subnet01Id
+          GroupSet:
+            - !GetAtt SecurityGroupStack.Outputs.DevSGGroupId
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo yum update
+          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+          unzip awscli-bundle.zip
+          sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+
+
+Outputs:
+
+  MyinstanceID:
+    Description: INSTANCE ID
+    Value: !Ref MyVMInstance
+
+  VpcId:
+    Description: INSTANCE ID
+    Value: !GetAtt VPCStack.Outputs.VpcId
+
+  PublicID:
+    Description: MyVMInstance Public IP
+    Value: !GetAtt MyVMInstance.PublicIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicIp"
+
